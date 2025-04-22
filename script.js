@@ -22,7 +22,7 @@
         css.type = 'text/css';
         css.innerHTML = [
             /* Container */
-            '.setter-tool-test { max-width: 800px; margin: 0 auto; padding: 2rem; border-radius: 2rem; font-family: figtree, sans-serif; }',
+            '.setter-tool { max-width: 800px; margin: 0 auto; padding: 2rem; border-radius: 2rem; font-family: figtree, sans-serif; }',
 
             /* Überschriften */
             '.section-header { font-size: 22px; color: #111827; margin-bottom: 16px; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid #E5E7EB; }',
@@ -88,7 +88,7 @@
     }
 
     function createStructure() {
-        var container = document.querySelector('.setter-tool-test');
+        var container = document.querySelector('.setter-tool');
         if (!container) return;
 
         var html =
