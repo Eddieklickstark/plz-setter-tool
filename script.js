@@ -2,6 +2,7 @@
     // Konfiguration
     var SHEET_URL     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR8BRATZeyiaD0NMh00CWU1bJYZA2XRYA3jrd_XRLg-wWV9UEh9hD___JLuiFZT8nalLamjKMJyc3MJ/pub?gid=0&single=true&output=csv';
     var WEBHOOK_URL   = 'https://hook.eu2.make.com/t9xvbefzv5i8sjcr7u8tiyvau7t1wnlw';
+    var CALENDLY_API_KEY = 'eyJraWQiOiIxY2UxZTEzNjE3ZGNmNzY2YjNjZWJjY2Y4ZGM1YmFmYThhNjVlNjg0MDIzZjdjMzJiZTgzNDliMjM4MDEzNWI0IiwidHlwIjoiUEFUIiwiYWxnIjoiRVMyNTYifQ.eyJpc3MiOiJodHRwczovL2F1dGguY2FsZW5kbHkuY29tIiwiaWF0IjoxNzQ1NDE0ODM2LCJqdGkiOiIwYzMxYzQzNC1lODQ4LTQ5YTItOTdiNi02Y2ZlZDZmODcxZjkiLCJ1c2VyX3V1aWQiOiI3ZWQyMjVhNi0wMzdjLTQ2ZWItOWFhOC0xY2QyMWU4Njk0YjEifQ.VbjvR_SqU9eJD3DaixqbpgZSdkR9yxpOYhdO8XrcPm75wFY2lM40DX8L6caJmUa-1ABkgW6xQdIrnlVEE_KYuA';
     var aeMapping     = {};
     var bundeslaender = [];
 
@@ -14,6 +15,8 @@
     localStorage.removeItem('calendlyBooked');
     localStorage.removeItem('formSubmitted');
     localStorage.removeItem('exitIntentShown');
+    localStorage.removeItem('calendlyInviteeUri');
+    localStorage.removeItem('calendlyEmail');
 
     var MAX_RETRIES = 3;
 
@@ -72,7 +75,7 @@
         container.innerHTML = `
             <div class="bundesland-section">
                 <h2 class="section-header">Terminbuchung</h2>
-                <h3 class="subsection-header">Schritt 1 – Calendly Termin buchen</h3>
+                <h3 class="subsection-header">Schritt 1 – Calendly Termin buchen</h3>
                 <div class="bundesland-input-container">
                     <select id="bundesland-select" class="ios-input required">
                         <option value="">Bundesland wählen...</option>
@@ -84,7 +87,7 @@
                 <div class="calendly-placeholder">Bitte wählen Sie zuerst ein Bundesland aus, um den Kalender zu laden.</div>
             </div>
 
-            <h3 class="subsection-header">Schritt 2 – Daten eintragen</h3>
+            <h3 class="subsection-header">Schritt 2 – Daten eintragen</h3>
             <p id="form-hint" style="background:#fff8db;border:1px solid #fcd34d;padding:12px;border-radius:8px;color:#92400e;font-size:14px;margin-bottom:24px;">
                 Das Formular wird sichtbar, sobald ein Termin über Calendly gebucht wurde.
             </p>
@@ -287,6 +290,76 @@
         }
     }
 
+    // Calendly API abfragen für E-Mail-Adresse
+    async function fetchInviteeEmail(inviteeUri) {
+        try {
+            console.log('🔍 Rufe Calendly API für Invitee-Details auf:', inviteeUri);
+            
+            const response = await fetch(inviteeUri, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + CALENDLY_API_KEY,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('API Fehler: ' + response.status);
+            }
+            
+            const data = await response.json();
+            console.log('✓ Calendly API-Antwort erhalten:', data);
+            
+            // E-Mail aus der API-Antwort extrahieren
+            const email = data.resource && data.resource.email 
+                ? data.resource.email 
+                : null;
+            
+            if (email) {
+                console.log('✓ E-Mail aus Calendly API erhalten:', email);
+                localStorage.setItem('calendlyEmail', email);
+                
+                // E-Mail in das Formular eintragen
+                fillEmailField(email);
+                return email;
+            } else {
+                console.error('⚠️ Keine E-Mail in der API-Antwort gefunden');
+                return null;
+            }
+        } catch (error) {
+            console.error('❌ Fehler beim API-Aufruf:', error);
+            return null;
+        }
+    }
+
+    // E-Mail-Feld im Formular ausfüllen
+    function fillEmailField(email) {
+        if (!email) return;
+        
+        // E-Mail-Feld im Formular suchen
+        const emailField = document.querySelector('input[name="email"]') || 
+                          document.querySelector('input[type="email"]');
+        
+        if (emailField) {
+            // E-Mail-Wert setzen
+            emailField.value = email;
+            
+            // Als readonly markieren
+            emailField.setAttribute('readonly', 'readonly');
+            
+            // Visuelles Feedback
+            emailField.style.backgroundColor = '#f0f9ff';
+            emailField.style.borderColor = '#93c5fd';
+            emailField.style.color = '#1e40af';
+            
+            console.log('✓ E-Mail-Feld erfolgreich ausgefüllt mit:', email);
+            return true;
+        } else {
+            console.warn('⚠️ E-Mail-Feld nicht gefunden');
+            return false;
+        }
+    }
+
     // Formular-Daten senden mit Retry
     async function sendFormData(data, attempt = 1) {
         try {
@@ -408,7 +481,7 @@
                 if(btn) btn.disabled = true;
                 showLoadingOverlay();
 
-                var data    = Object.fromEntries(new FormData(e.target));
+                var data = Object.fromEntries(new FormData(e.target));
                 console.log('Sende Daten:', data);
                 var ok = await sendFormData(data);
 
@@ -452,20 +525,27 @@
         loadDependencies();
     }
 
-    // Einziger Calendly‑Event‑Listener
+    // Einziger Calendly‑Event‑Listener mit API-Integration
     window.addEventListener('message', function(e) {
         if (e.data.event === 'calendly.event_scheduled') {
             console.log('✅ Termin gebucht – Debug-Infos:', e.data);
+            
+            // Status setzen
             calendlyBooked = true;
             localStorage.setItem('calendlyBooked', 'true');
-
-            // E-Mail extrahieren
-            var emailValue = null;
-            if (e.data.payload && e.data.payload.invitee && e.data.payload.invitee.email) {
-                emailValue = e.data.payload.invitee.email;
-                console.log('✓ E‑Mail aus payload.invitee.email:', emailValue);
-            } else {
-                console.warn('⚠️ Keine E‑Mail gefunden – kein Test‑Wert gesetzt');
+            
+            // Invitee-URI aus dem Payload extrahieren
+            const payload = e.data.payload || {};
+            const inviteeUri = payload.invitee ? payload.invitee.uri : null;
+            
+            if (inviteeUri) {
+                console.log('✓ Invitee URI erhalten:', inviteeUri);
+                localStorage.setItem('calendlyInviteeUri', inviteeUri);
+                
+                // Calendly API abfragen, um E-Mail zu bekommen
+                fetchInviteeEmail(inviteeUri).then(email => {
+                    console.log(email ? '✓ E-Mail-Adresse erfolgreich abgerufen' : '⚠️ Keine E-Mail-Adresse gefunden');
+                });
             }
 
             // Formular anzeigen
@@ -473,28 +553,20 @@
             var hint = document.getElementById('form-hint');
             if (form) {
                 form.style.display = 'block';
-                setTimeout(function(){ form.style.opacity = '1'; },50);
+                setTimeout(function(){ 
+                    form.style.opacity = '1';
+                    
+                    // Nochmals versuchen, das E-Mail-Feld zu füllen, nachdem das Formular sichtbar ist
+                    setTimeout(function() {
+                        var storedEmail = localStorage.getItem('calendlyEmail');
+                        if (storedEmail) {
+                            fillEmailField(storedEmail);
+                        }
+                    }, 200);
+                }, 50);
             }
             if (hint) {
                 hint.style.display = 'none';
-            }
-
-            // Nur füllen, wenn E‑Mail vorliegt
-            if (emailValue) {
-                var field = document.querySelector('input[name="email"]')
-                         || document.querySelector('input[type="email"]')
-                         || document.querySelector('input[placeholder*="E-Mail"]');
-                if (field) {
-                    field.value = emailValue;
-                    console.log('✓ E‑Mail-Feld gefüllt:', emailValue);
-                    // sicherstellen: editierbar
-                    field.removeAttribute('readonly');
-                    field.style.backgroundColor = '';
-                    field.style.borderColor = '';
-                    field.style.color = '';
-                } else {
-                    console.warn('⚠️ E‑Mail-Feld nicht gefunden');
-                }
             }
 
             // Exit‑Intent aktivieren
