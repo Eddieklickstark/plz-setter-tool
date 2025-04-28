@@ -130,10 +130,17 @@
         document.head.appendChild(css);
     }
 
-    // HTML-Struktur aufbauen
+    // HTML-Struktur aufbauen mit verbesserten Fehlerchecks
     function createStructure() {
         var container = document.querySelector('.setter-tool');
-        if (!container) return;
+        if (!container) {
+            console.warn('⚠️ Container ".setter-tool" nicht gefunden');
+            // Versuche, einen Container zu erstellen, wenn er nicht existiert
+            container = document.createElement('div');
+            container.className = 'setter-tool';
+            document.body.appendChild(container);
+        }
+        
         container.innerHTML = `
             <div class="bundesland-section">
                 <h2 class="section-header">Terminbuchung</h2>
@@ -304,6 +311,7 @@
                 <div class="spinner"></div>
             </div>
         `;
+        
         // Formular initial verstecken
         var form = document.getElementById('contact-form');
         if (form) { form.style.display = 'none'; form.style.opacity = '0'; }
@@ -311,6 +319,13 @@
         // Stornierungsbereich initial verstecken (wird nur für AEs angezeigt)
         var stornoSection = document.getElementById('storno-section');
         if (stornoSection) { stornoSection.style.display = 'none'; }
+        
+        // Prüfen, ob die wichtigsten Elemente erstellt wurden
+        var basicElementsExist = document.getElementById('bundesland-select') && 
+                               document.getElementById('calendly-container') && 
+                               document.getElementById('contact-form');
+                               
+        console.log('Basiselemente erstellt:', basicElementsExist ? '✅' : '❌');
     }
 
     // Bundesländer-Liste befüllen
@@ -378,71 +393,50 @@
         }
     }
 
-    // Funktion zum Stornieren eines Termins - Angepasst für aktuelle API-Struktur
+    // Funktion zum Stornieren eines Termins - Mit direktem Link-Fallback
     async function cancelEvent(uuid, reason) {
         console.log('🔄 Versuche Termin zu stornieren:', uuid);
         
         try {
-            // Calendly-API für Stornierung aufrufen
-            const response = await fetch(`https://api.calendly.com/scheduled_events/${uuid}/cancellation`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'Bearer ' + CALENDLY_API_KEY,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    reason: reason || 'Falscher Kontakt, Termin wird neu gebucht'
-                })
-            });
-            
-            console.log('📡 API-Antwort:', response.status);
-            
-            // Prüfen, ob die Anfrage erfolgreich war
-            if (response.status === 201 || response.status === 204) {
-                // 201 Created oder 204 No Content sind Erfolgs-Status-Codes
-                let data = {};
-                if (response.status !== 204) {
-                    try {
-                        data = await response.json();
-                    } catch (e) {
-                        // Ignorieren, falls kein JSON zurückgegeben wurde
-                    }
-                }
-                console.log('✅ Stornierung erfolgreich!');
-                return { success: true, data };
-            } 
-            // Spezielle Fehlerbehandlung für CORS-Probleme
-            else if (response.status === 403) {
-                console.warn('⚠️ Fehler 403: Möglicherweise CORS-Problem. Versuche Alternative...');
-                
-                // Alternativ können wir eine Redirect-Lösung anbieten
-                const cancelUrl = `https://calendly.com/cancellations/${uuid}`;
-                if (confirm('Die direkte Stornierung ist fehlgeschlagen. Möchten Sie zur Calendly-Stornierungsseite weitergeleitet werden?')) {
-                    window.open(cancelUrl, '_blank');
-                    return { success: true, redirect: true };
-                }
-                return { success: false, error: 'Direkte Stornierung nicht möglich. Bitte nutzen Sie den Link in Ihrer Bestätigungs-E-Mail.' };
-            } 
-            else {
-                let errorText;
-                try {
-                    errorText = await response.text();
-                } catch (e) {
-                    errorText = `Fehler ${response.status}`;
-                }
-                console.error('❌ Stornierung fehlgeschlagen:', errorText);
-                return { success: false, error: errorText, status: response.status };
-            }
-        } catch (error) {
-            console.error('❌ Fehler bei der Stornierungsanfrage:', error);
-            
-            // Alternativ können wir eine Redirect-Lösung anbieten
+            // Zeige einen Dialog mit der Option zum direkten Stornieren via Calendly-URL
             const cancelUrl = `https://calendly.com/cancellations/${uuid}`;
-            if (confirm('Die direkte Stornierung ist fehlgeschlagen. Möchten Sie zur Calendly-Stornierungsseite weitergeleitet werden?')) {
-                window.open(cancelUrl, '_blank');
-                return { success: true, redirect: true };
+            
+            // Stornierungsbestätigung anzeigen
+            const cancelSuccess = document.getElementById('cancel-success');
+            const cancelError = document.getElementById('cancel-error');
+            const cancelSpinner = document.getElementById('cancel-spinner');
+            
+            if (cancelSpinner) cancelSpinner.classList.remove('show');
+            
+            // Redirect zu Calendly's Standard-Stornierungsseite
+            console.log('✅ Leite weiter zur Calendly-Stornierungsseite:', cancelUrl);
+            
+            // Dialog anzeigen mit der Info über Weiterleitung
+            if (cancelSuccess) {
+                cancelSuccess.innerHTML = `
+                    Leite weiter zur Calendly-Stornierungsseite...<br>
+                    <small>Falls keine automatische Weiterleitung erfolgt, 
+                    <a href="${cancelUrl}" target="_blank" style="color:white;text-decoration:underline;">klicken Sie hier</a></small>
+                `;
+                cancelSuccess.classList.add('show');
             }
             
+            // Kurze Verzögerung, damit der Benutzer die Nachricht sieht
+            setTimeout(() => {
+                window.open(cancelUrl, '_blank');
+                
+                // Nach Stornierung über Calendly-Seite: Status zurücksetzen und Seite neu laden
+                localStorage.removeItem('calendlyBooked');
+                localStorage.removeItem('eventUuid');
+                localStorage.removeItem('userEmail');
+                
+                // Countdown für Seitenneuladen starten
+                startCountdown(COUNTDOWN_SECONDS);
+            }, 1000);
+            
+            return { success: true, redirect: true };
+        } catch (error) {
+            console.error('❌ Fehler bei der Stornierungsvorbereitung:', error);
             return { success: false, error: error.message };
         }
     }
@@ -662,101 +656,122 @@
         });
     }
 
-    // Initialisierung
+    // Initialisierung mit besserer Fehlerbehandlung
     function init() {
-        addStyles();
-        createStructure();
-        loadAEData();
+        try {
+            addStyles();
+            createStructure();
+            loadAEData();
 
-        // Formular beim Start verstecken
-        setTimeout(function(){
-            var f = document.getElementById('contact-form');
-            if(f) { f.style.display='none'; f.style.opacity='0'; }
-        },100);
+            // Formular beim Start verstecken
+            setTimeout(function(){
+                var f = document.getElementById('contact-form');
+                if(f) { f.style.display='none'; f.style.opacity='0'; }
+            },100);
 
-        // Bundesland-Auswahl
-        var sel = document.getElementById('bundesland-select');
-        if (sel) {
-            sel.addEventListener('change', function(){
-                var bl = this.value;
-                document.getElementById('bundesland-hidden').value = bl;
-                updateUI(aeMapping[bl], bl);
-            });
-        }
+            // Bundesland-Auswahl
+            var sel = document.getElementById('bundesland-select');
+            if (sel) {
+                sel.addEventListener('change', function(){
+                    var bl = this.value;
+                    var hiddenField = document.getElementById('bundesland-hidden');
+                    if (hiddenField) hiddenField.value = bl;
+                    updateUI(aeMapping[bl], bl);
+                });
+            }
 
-        // Formular‑Submit
-        var form = document.getElementById('contact-form');
-        if (form) {
-            form.addEventListener('submit', async function(e){
-                e.preventDefault();
-                formSubmitted = true;
-                localStorage.setItem('formSubmitted','true');
-                var btn = form.querySelector('.ios-submit');
-                if(btn) btn.disabled = true;
-                showLoadingOverlay();
+            // Formular‑Submit
+            var form = document.getElementById('contact-form');
+            if (form) {
+                form.addEventListener('submit', async function(e){
+                    e.preventDefault();
+                    formSubmitted = true;
+                    localStorage.setItem('formSubmitted','true');
+                    var btn = form.querySelector('.ios-submit');
+                    if(btn) btn.disabled = true;
+                    showLoadingOverlay();
 
-                var data = Object.fromEntries(new FormData(e.target));
-                console.log('Sende Daten:', data);
-                var ok = await sendFormData(data);
+                    var data = Object.fromEntries(new FormData(e.target));
+                    console.log('Sende Daten:', data);
+                    var ok = await sendFormData(data);
 
-                hideLoadingOverlay();
-                if (ok) {
-                    var msg = document.getElementById('success-message');
-                    if(msg) msg.classList.add('show');
-                    setTimeout(function(){
-                        if(msg) msg.classList.remove('show');
+                    hideLoadingOverlay();
+                    if (ok) {
+                        var msg = document.getElementById('success-message');
+                        if(msg) msg.classList.add('show');
                         setTimeout(function(){
-                            window.scrollTo({top:0,behavior:'smooth'});
-                            window.location.reload();
-                        },1000);
-                    },2000);
-                } else {
-                    alert('Fehler beim Speichern. Bitte erneut versuchen.');
-                    if(btn) btn.disabled = false;
-                }
-            });
-        }
-        
-        // Stornierungsbutton
-        var cancelButton = document.getElementById('calendly-cancel');
-        var cancelReason = document.getElementById('cancel-reason');
-        var cancelSpinner = document.getElementById('cancel-spinner');
-        var cancelSuccess = document.getElementById('cancel-success');
-        var cancelError = document.getElementById('cancel-error');
-        
-        if (cancelButton) {
-            cancelButton.addEventListener('click', async function() {
-                if (!eventUuid) {
-                    alert('Konnte keine Event-ID finden. Bitte nutzen Sie den Stornierungslink in Ihrer Bestätigungs-E-Mail.');
-                    return;
-                }
-                
-                // Button-Status: Lädt
-                cancelButton.disabled = true;
-                if (cancelSpinner) cancelSpinner.classList.add('show');
-                if (cancelSuccess) cancelSuccess.classList.remove('show');
-                if (cancelError) cancelError.classList.remove('show');
-                
-                const reason = cancelReason ? cancelReason.value : '';
-                const result = await cancelEvent(eventUuid, reason);
-                
-                if (result.success) {
-                    if (cancelSuccess) cancelSuccess.classList.add('show');
+                            if(msg) msg.classList.remove('show');
+                            setTimeout(function(){
+                                window.scrollTo({top:0,behavior:'smooth'});
+                                window.location.reload();
+                            },1000);
+                        },2000);
+                    } else {
+                        alert('Fehler beim Speichern. Bitte erneut versuchen.');
+                        if(btn) btn.disabled = false;
+                    }
+                });
+            }
+            
+            // Stornierungsbutton
+            var cancelButton = document.getElementById('calendly-cancel');
+            var cancelReason = document.getElementById('cancel-reason');
+            var cancelSpinner = document.getElementById('cancel-spinner');
+            var cancelSuccess = document.getElementById('cancel-success');
+            var cancelError = document.getElementById('cancel-error');
+            
+            if (cancelButton) {
+                cancelButton.addEventListener('click', async function() {
+                    if (!eventUuid) {
+                        alert('Konnte keine Event-ID finden. Bitte nutzen Sie den Stornierungslink in Ihrer Bestätigungs-E-Mail.');
+                        return;
+                    }
                     
-                    // Status zurücksetzen
-                    calendlyBooked = false;
-                    localStorage.removeItem('calendlyBooked');
-                    localStorage.removeItem('eventUuid');
-                    localStorage.removeItem('userEmail');
+                    // Button-Status: Lädt
+                    cancelButton.disabled = true;
+                    if (cancelSpinner) cancelSpinner.classList.add('show');
+                    if (cancelSuccess) cancelSuccess.classList.remove('show');
+                    if (cancelError) cancelError.classList.remove('show');
                     
-                    // Countdown starten und dann Seite neu laden
-                    startCountdown(COUNTDOWN_SECONDS);
-                } else {
-                    if (cancelError) cancelError.classList.add('show');
-                    cancelButton.disabled = false;
-                    if (cancelSpinner) cancelSpinner.classList.remove('show');
-                }
-            });
+                    const reason = cancelReason ? cancelReason.value : '';
+                    const result = await cancelEvent(eventUuid, reason);
+                    
+                    if (result.success) {
+                        if (cancelSuccess) cancelSuccess.classList.add('show');
+                        
+                        // Bei Redirect zur Calendly-Seite: keine weiteren Aktionen nötig
+                        if (!result.redirect) {
+                            // Status zurücksetzen
+                            calendlyBooked = false;
+                            localStorage.removeItem('calendlyBooked');
+                            localStorage.removeItem('eventUuid');
+                            localStorage.removeItem('userEmail');
+                            
+                            // Countdown starten und dann Seite neu laden
+                            startCountdown(COUNTDOWN_SECONDS);
+                        }
+                    } else {
+                        if (cancelError) {
+                            cancelError.textContent = result.error || 'Fehler bei der Stornierung. Bitte versuchen Sie es erneut oder nutzen Sie den Link in Ihrer Bestätigungs-E-Mail.';
+                            cancelError.classList.add('show');
+                        }
+                        cancelButton.disabled = false;
+                        if (cancelSpinner) cancelSpinner.classList.remove('show');
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('❌ Fehler bei der Initialisierung:', error);
+            // Fallback UI anzeigen, wenn etwas schiefgeht
+            var container = document.querySelector('.setter-tool');
+            if (container) {
+                container.innerHTML = `
+                    <div style="padding:20px; background:#fee2e2; border-radius:8px; color:#b91c1c;">
+                        <h3>Es gab ein Problem beim Laden des Buchungssystems</h3>
+                        <p>Bitte laden Sie die Seite neu oder versuchen Sie es später erneut.</p>
+                    </div>
+                `;
+            }
         }
     }
 
