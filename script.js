@@ -24,7 +24,7 @@
     var MAX_RETRIES = 3;
     var COUNTDOWN_SECONDS = 5; // Sekunden für den Countdown nach Stornierung
 
-    console.log('🚀 Script gestartet - Version mit optimierter Stornierungsfunktion');
+    console.log('🚀 Script gestartet - Version mit optimierter Stornierungsfunktion - V2');
 
     // Styles dynamisch hinzufügen
     function addStyles() {
