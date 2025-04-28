@@ -378,11 +378,12 @@
         }
     }
 
-    // Funktion zum Stornieren eines Termins
+    // Funktion zum Stornieren eines Termins - Angepasst für aktuelle API-Struktur
     async function cancelEvent(uuid, reason) {
         console.log('🔄 Versuche Termin zu stornieren:', uuid);
         
         try {
+            // Calendly-API für Stornierung aufrufen
             const response = await fetch(`https://api.calendly.com/scheduled_events/${uuid}/cancellation`, {
                 method: 'POST',
                 headers: {
@@ -396,17 +397,52 @@
             
             console.log('📡 API-Antwort:', response.status);
             
-            if (response.status === 201) {
-                const data = await response.json();
-                console.log('✅ Stornierung erfolgreich:', data);
+            // Prüfen, ob die Anfrage erfolgreich war
+            if (response.status === 201 || response.status === 204) {
+                // 201 Created oder 204 No Content sind Erfolgs-Status-Codes
+                let data = {};
+                if (response.status !== 204) {
+                    try {
+                        data = await response.json();
+                    } catch (e) {
+                        // Ignorieren, falls kein JSON zurückgegeben wurde
+                    }
+                }
+                console.log('✅ Stornierung erfolgreich!');
                 return { success: true, data };
-            } else {
-                const errorText = await response.text();
+            } 
+            // Spezielle Fehlerbehandlung für CORS-Probleme
+            else if (response.status === 403) {
+                console.warn('⚠️ Fehler 403: Möglicherweise CORS-Problem. Versuche Alternative...');
+                
+                // Alternativ können wir eine Redirect-Lösung anbieten
+                const cancelUrl = `https://calendly.com/cancellations/${uuid}`;
+                if (confirm('Die direkte Stornierung ist fehlgeschlagen. Möchten Sie zur Calendly-Stornierungsseite weitergeleitet werden?')) {
+                    window.open(cancelUrl, '_blank');
+                    return { success: true, redirect: true };
+                }
+                return { success: false, error: 'Direkte Stornierung nicht möglich. Bitte nutzen Sie den Link in Ihrer Bestätigungs-E-Mail.' };
+            } 
+            else {
+                let errorText;
+                try {
+                    errorText = await response.text();
+                } catch (e) {
+                    errorText = `Fehler ${response.status}`;
+                }
                 console.error('❌ Stornierung fehlgeschlagen:', errorText);
                 return { success: false, error: errorText, status: response.status };
             }
         } catch (error) {
             console.error('❌ Fehler bei der Stornierungsanfrage:', error);
+            
+            // Alternativ können wir eine Redirect-Lösung anbieten
+            const cancelUrl = `https://calendly.com/cancellations/${uuid}`;
+            if (confirm('Die direkte Stornierung ist fehlgeschlagen. Möchten Sie zur Calendly-Stornierungsseite weitergeleitet werden?')) {
+                window.open(cancelUrl, '_blank');
+                return { success: true, redirect: true };
+            }
+            
             return { success: false, error: error.message };
         }
     }
@@ -430,12 +466,15 @@
         }, 1000);
     }
 
-    // Calendly Event-Details abrufen und E-Mail extrahieren
-    async function fetchCalendlyEvent(eventUri) {
+    // E-Mail aus Calendly-Ereignisdaten extrahieren - Angepasst für die aktuellen API-Endpunkte
+    async function fetchCalendlyEvent(eventUuid) {
         try {
-            console.log('🔄 Rufe Termin-Details ab:', eventUri);
+            // Richtig formatierter API-Endpunkt für Calendly
+            // Zuerst versuchen wir, die Invitee-Informationen zu bekommen, da diese die E-Mail direkt enthalten
+            console.log('🔄 Rufe Invitee-Informationen ab für Event:', eventUuid);
             
-            const response = await fetch(eventUri, {
+            const inviteesUrl = `https://api.calendly.com/scheduled_events/${eventUuid}/invitees`;
+            const response = await fetch(inviteesUrl, {
                 method: 'GET',
                 headers: {
                     'Authorization': 'Bearer ' + CALENDLY_API_KEY,
@@ -444,48 +483,74 @@
             });
             
             if (!response.ok) {
-                throw new Error('API-Fehler: ' + response.status);
+                console.warn(`⚠️ Invitees API-Fehler: ${response.status}. Versuche alternativen Endpunkt...`);
+                return extractEmailFromPayload(); // Fallback zur E-Mail-Extraktion aus dem payload
             }
             
             const data = await response.json();
-            console.log('✅ Event-Details erhalten:', data);
+            console.log('✅ Invitee-Daten erhalten:', data);
             
-            // E-Mail extrahieren
-            let email = null;
-            
-            // Verschiedene mögliche Orte für die E-Mail prüfen
-            if (data.resource && data.resource.email) {
-                email = data.resource.email;
-            } else if (data.resource && data.resource.invitees && data.resource.invitees.length > 0) {
-                email = data.resource.invitees[0].email;
-            } else if (data.resource && data.resource.event_memberships && data.resource.event_memberships.length > 0) {
-                for (const membership of data.resource.event_memberships) {
-                    if (membership.user && membership.user.email) {
-                        email = membership.user.email;
-                        break;
-                    }
-                }
-            } else if (data.resource && data.resource.event_guests && data.resource.event_guests.length > 0) {
-                for (const guest of data.resource.event_guests) {
-                    if (guest.email) {
-                        email = guest.email;
-                        break;
-                    }
+            // E-Mail aus der Antwort extrahieren
+            if (data.collection && data.collection.length > 0) {
+                const invitee = data.collection[0];
+                if (invitee.email) {
+                    const email = invitee.email;
+                    console.log('📧 E-Mail aus Invitee-Daten gefunden:', email);
+                    userEmail = email;
+                    localStorage.setItem('userEmail', email);
+                    fillEmailField(email);
+                    return email;
                 }
             }
             
-            console.log('📧 Extrahierte E-Mail:', email);
-            
-            if (email) {
-                userEmail = email;
-                localStorage.setItem('userEmail', email);
-                fillEmailField(email);
-            }
-            
-            return email;
+            // Wenn wir hier ankommen, wurde keine E-Mail gefunden
+            console.warn('⚠️ Keine E-Mail in den Invitee-Daten gefunden. Versuche Fallback...');
+            return extractEmailFromPayload();
             
         } catch (error) {
-            console.error('❌ Fehler beim Abrufen der Event-Details:', error);
+            console.error('❌ Fehler beim Abrufen der Calendly-Daten:', error);
+            return extractEmailFromPayload(); // Fallback-Methode
+        }
+    }
+    
+    // Fallback: E-Mail aus dem Payload-Objekt extrahieren, falls die API-Anfrage fehlschlägt
+    function extractEmailFromPayload() {
+        try {
+            // Versuchen wir, die E-Mail aus dem localStorage oder DOM zu extrahieren
+            
+            // 1. Prüfen, ob wir die E-Mail im localStorage haben
+            const storedEmail = localStorage.getItem('calendlyEmail');
+            if (storedEmail) {
+                console.log('📧 E-Mail aus localStorage gefunden:', storedEmail);
+                userEmail = storedEmail;
+                fillEmailField(storedEmail);
+                return storedEmail;
+            }
+            
+            // 2. Calendly-Widget prüfen (manchmal speichert es die E-Mail im DOM)
+            const calendlyFrame = document.querySelector('.calendly-inline-widget iframe');
+            if (calendlyFrame && calendlyFrame.contentWindow) {
+                // Versuchen, auf Calendly-Daten im iframe zuzugreifen
+                try {
+                    const frameContent = calendlyFrame.contentWindow.document;
+                    const emailInput = frameContent.querySelector('input[type="email"]');
+                    if (emailInput && emailInput.value) {
+                        const email = emailInput.value;
+                        console.log('📧 E-Mail aus Calendly-Widget gefunden:', email);
+                        userEmail = email;
+                        localStorage.setItem('userEmail', email);
+                        fillEmailField(email);
+                        return email;
+                    }
+                } catch (frameError) {
+                    console.warn('⚠️ Konnte nicht auf Calendly-Widget zugreifen:', frameError);
+                }
+            }
+            
+            console.warn('⚠️ Keine E-Mail gefunden. Formular wird ohne vorbefüllte E-Mail angezeigt');
+            return null;
+        } catch (error) {
+            console.error('❌ Fehler bei E-Mail-Extraktion:', error);
             return null;
         }
     }
@@ -716,59 +781,93 @@
         loadDependencies();
     }
 
-    // Calendly-Event-Listener
+    // Calendly-Event-Listener mit verbesserter Fehlerbehandlung
     window.addEventListener('message', function(e) {
         if (e.data.event === 'calendly.event_scheduled') {
             console.log('✅ Termin gebucht!', e.data);
             
-            // Status setzen
-            calendlyBooked = true;
-            localStorage.setItem('calendlyBooked', 'true');
-            
-            // Event-UUID für Stornierung extrahieren
-            const payload = e.data.payload || {};
-            const eventUri = payload.event ? payload.event.uri : null;
-            
-            if (eventUri) {
-                // UUID aus der URI extrahieren
-                eventUuid = eventUri.split('/').pop();
-                console.log('📝 Event-UUID für Stornierung gespeichert:', eventUuid);
-                localStorage.setItem('eventUuid', eventUuid);
+            try {
+                // Status setzen
+                calendlyBooked = true;
+                localStorage.setItem('calendlyBooked', 'true');
                 
-                // E-Mail über die Calendly API abrufen
-                fetchCalendlyEvent(eventUri);
-            } else {
-                console.warn('⚠️ Keine Event-URI im Calendly-Event gefunden');
-            }
-            
-            // Formular anzeigen
-            var form = document.getElementById('contact-form');
-            var hint = document.getElementById('form-hint');
-            var stornoSection = document.getElementById('storno-section');
-            
-            if (form) {
-                form.style.display = 'block';
-                setTimeout(function() { 
-                    form.style.opacity = '1';
+                // E-Mail direkt aus dem Payload extrahieren, wenn verfügbar
+                const payload = e.data.payload || {};
+                let emailFromPayload = null;
+                
+                // E-Mail aus dem Payload extrahieren (verschiedene mögliche Pfade prüfen)
+                if (payload.invitee && payload.invitee.email) {
+                    emailFromPayload = payload.invitee.email;
+                    console.log('📧 E-Mail aus Payload gefunden:', emailFromPayload);
+                    userEmail = emailFromPayload;
+                    localStorage.setItem('userEmail', emailFromPayload);
+                    // Email gleich ins Formular eintragen
+                    setTimeout(() => {
+                        fillEmailField(emailFromPayload);
+                    }, 100);
+                }
+                
+                // Event-UUID für Stornierung extrahieren
+                const eventUri = payload.event ? payload.event.uri : null;
+                
+                if (eventUri) {
+                    // UUID aus der URI extrahieren
+                    eventUuid = eventUri.split('/').pop();
+                    console.log('📝 Event-UUID für Stornierung gespeichert:', eventUuid);
+                    localStorage.setItem('eventUuid', eventUuid);
                     
-                    // AEs können den Storno-Bereich sehen (basierend auf Domain-Name oder URL-Parameter)
-                    const isAE = window.location.hostname.includes('admin') || 
-                                window.location.href.includes('ae=true') ||
-                                window.location.pathname.includes('/admin/');
-                    
-                    if (isAE && stornoSection) {
-                        stornoSection.style.display = 'block';
+                    // E-Mail über die Calendly API abrufen, falls nicht im Payload
+                    if (!emailFromPayload) {
+                        fetchCalendlyEvent(eventUuid);
                     }
-                }, 50);
+                } else {
+                    console.warn('⚠️ Keine Event-URI im Calendly-Event gefunden');
+                }
+                
+                // Formular anzeigen
+                var form = document.getElementById('contact-form');
+                var hint = document.getElementById('form-hint');
+                var stornoSection = document.getElementById('storno-section');
+                
+                if (form) {
+                    form.style.display = 'block';
+                    setTimeout(function() { 
+                        form.style.opacity = '1';
+                        
+                        // AEs können den Storno-Bereich sehen (basierend auf Domain-Name oder URL-Parameter)
+                        const isAE = window.location.hostname.includes('admin') || 
+                                    window.location.href.includes('ae=true') ||
+                                    window.location.pathname.includes('/admin/');
+                        
+                        if (isAE && stornoSection) {
+                            stornoSection.style.display = 'block';
+                        }
+                    }, 50);
+                }
+                
+                if (hint) {
+                    hint.style.display = 'none';
+                }
+                
+                // Exit Intent aktivieren
+                setupExitIntent();
+                console.log('🔄 Exit Intent aktiviert');
+            } catch (error) {
+                console.error('❌ Fehler bei der Verarbeitung des Calendly-Events:', error);
+                
+                // Minimale Sicherheitsmaßnahme: Formular trotzdem anzeigen
+                var form = document.getElementById('contact-form');
+                var hint = document.getElementById('form-hint');
+                
+                if (form) {
+                    form.style.display = 'block';
+                    setTimeout(function() { form.style.opacity = '1'; }, 50);
+                }
+                
+                if (hint) {
+                    hint.style.display = 'none';
+                }
             }
-            
-            if (hint) {
-                hint.style.display = 'none';
-            }
-            
-            // Exit Intent aktivieren
-            setupExitIntent();
-            console.log('🔄 Exit Intent aktiviert');
         }
     });
 })();
