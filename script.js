@@ -15,10 +15,12 @@
     localStorage.removeItem('calendlyBooked');
     localStorage.removeItem('formSubmitted');
     localStorage.removeItem('exitIntentShown');
-    localStorage.removeItem('calendlyInviteeUri');
+    localStorage.removeItem('calendlyEventUri');
     localStorage.removeItem('calendlyEmail');
 
     var MAX_RETRIES = 3;
+
+    console.log('🚀 Script gestartet - Finale Version mit korrektem API-Endpoint');
 
     // Styles dynamisch hinzufügen
     function addStyles() {
@@ -290,12 +292,13 @@
         }
     }
 
-    // Calendly API abfragen für E-Mail-Adresse
-    async function fetchInviteeEmail(inviteeUri) {
+    // Calendly Event-Details vom Event-Endpoint abrufen
+    async function fetchCalendlyEvent(eventUri) {
         try {
-            console.log('🔍 Rufe Calendly API für Invitee-Details auf:', inviteeUri);
+            console.log('Rufe Termin-Details von der API ab:', eventUri);
             
-            const response = await fetch(inviteeUri, {
+            // API-Anfrage an Calendly senden
+            const response = await fetch(eventUri, {
                 method: 'GET',
                 headers: {
                     'Authorization': 'Bearer ' + CALENDLY_API_KEY,
@@ -308,22 +311,43 @@
             }
             
             const data = await response.json();
-            console.log('✓ Calendly API-Antwort erhalten:', data);
+            console.log('✓ Event-Details erhalten:', data);
             
-            // E-Mail aus der API-Antwort extrahieren
-            const email = data.resource && data.resource.email 
-                ? data.resource.email 
-                : null;
+            // E-Mail-Adresse aus verschiedenen möglichen Quellen extrahieren
+            let email = null;
+            
+            // Versuch 1: Direkte E-Mail im Resource
+            if (data.resource && data.resource.email) {
+                email = data.resource.email;
+                console.log('✓ E-Mail aus resource.email gefunden:', email);
+            }
+            // Versuch 2: In den Event-Mitgliedschaften suchen
+            else if (data.resource && data.resource.event_memberships && data.resource.event_memberships.length > 0) {
+                for (const membership of data.resource.event_memberships) {
+                    if (membership.user_email) {
+                        email = membership.user_email;
+                        console.log('✓ E-Mail aus event_memberships gefunden:', email);
+                        break;
+                    }
+                }
+            }
+            // Versuch 3: In den Event-Gästen suchen
+            else if (data.resource && data.resource.event_guests && data.resource.event_guests.length > 0) {
+                for (const guest of data.resource.event_guests) {
+                    if (guest.email) {
+                        email = guest.email;
+                        console.log('✓ E-Mail aus event_guests gefunden:', email);
+                        break;
+                    }
+                }
+            }
             
             if (email) {
-                console.log('✓ E-Mail aus Calendly API erhalten:', email);
                 localStorage.setItem('calendlyEmail', email);
-                
-                // E-Mail in das Formular eintragen
                 fillEmailField(email);
                 return email;
             } else {
-                console.error('⚠️ Keine E-Mail in der API-Antwort gefunden');
+                console.warn('⚠️ Keine E-Mail in den Event-Details gefunden');
                 return null;
             }
         } catch (error) {
@@ -334,7 +358,7 @@
 
     // E-Mail-Feld im Formular ausfüllen
     function fillEmailField(email) {
-        if (!email) return;
+        if (!email) return false;
         
         // E-Mail-Feld im Formular suchen
         const emailField = document.querySelector('input[name="email"]') || 
@@ -525,53 +549,45 @@
         loadDependencies();
     }
 
-    // Einziger Calendly‑Event‑Listener mit API-Integration
+    // Einziger Calendly-Event-Listener mit direkter API-Integration
     window.addEventListener('message', function(e) {
         if (e.data.event === 'calendly.event_scheduled') {
-            console.log('✅ Termin gebucht – Debug-Infos:', e.data);
+            console.log('✅ Termin gebucht!', e.data);
             
             // Status setzen
             calendlyBooked = true;
             localStorage.setItem('calendlyBooked', 'true');
             
-            // Invitee-URI aus dem Payload extrahieren
-            const payload = e.data.payload || {};
-            const inviteeUri = payload.invitee ? payload.invitee.uri : null;
-            
-            if (inviteeUri) {
-                console.log('✓ Invitee URI erhalten:', inviteeUri);
-                localStorage.setItem('calendlyInviteeUri', inviteeUri);
-                
-                // Calendly API abfragen, um E-Mail zu bekommen
-                fetchInviteeEmail(inviteeUri).then(email => {
-                    console.log(email ? '✓ E-Mail-Adresse erfolgreich abgerufen' : '⚠️ Keine E-Mail-Adresse gefunden');
-                });
-            }
-
             // Formular anzeigen
             var form = document.getElementById('contact-form');
             var hint = document.getElementById('form-hint');
+            
             if (form) {
                 form.style.display = 'block';
-                setTimeout(function(){ 
-                    form.style.opacity = '1';
-                    
-                    // Nochmals versuchen, das E-Mail-Feld zu füllen, nachdem das Formular sichtbar ist
-                    setTimeout(function() {
-                        var storedEmail = localStorage.getItem('calendlyEmail');
-                        if (storedEmail) {
-                            fillEmailField(storedEmail);
-                        }
-                    }, 200);
-                }, 50);
+                setTimeout(function() { form.style.opacity = '1'; }, 50);
             }
+            
             if (hint) {
                 hint.style.display = 'none';
             }
-
-            // Exit‑Intent aktivieren
+            
+            // Event-URI aus dem Payload extrahieren
+            const payload = e.data.payload || {};
+            const eventUri = payload.event ? payload.event.uri : null;
+            
+            if (eventUri) {
+                console.log('✓ Event-URI erhalten:', eventUri);
+                localStorage.setItem('calendlyEventUri', eventUri);
+                
+                // E-Mail über die Calendly API abrufen
+                fetchCalendlyEvent(eventUri);
+            } else {
+                console.warn('⚠️ Keine Event-URI im Calendly-Event gefunden');
+            }
+            
+            // Exit Intent aktivieren
             setupExitIntent();
+            console.log('Exit Intent aktiviert');
         }
     });
-
 })();
