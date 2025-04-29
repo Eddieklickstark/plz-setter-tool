@@ -292,7 +292,7 @@
         }
     }
 
-    // Calendly Event-Details vom Event-Endpoint abrufen
+      // Calendly Event-Details vom Event-Endpoint abrufen - Korrigiert für Kundenemail
     async function fetchCalendlyEvent(eventUri) {
         try {
             console.log('Rufe Termin-Details von der API ab:', eventUri);
@@ -313,30 +313,25 @@
             const data = await response.json();
             console.log('✓ Event-Details erhalten:', data);
             
-            // E-Mail-Adresse aus verschiedenen möglichen Quellen extrahieren
+            // E-Mail-Adresse des EINGELADENEN/KUNDEN extrahieren (nicht des Calendly-Users)
             let email = null;
             
-            // Versuch 1: Direkte E-Mail im Resource
-            if (data.resource && data.resource.email) {
-                email = data.resource.email;
-                console.log('✓ E-Mail aus resource.email gefunden:', email);
-            }
-            // Versuch 2: In den Event-Mitgliedschaften suchen
-            else if (data.resource && data.resource.event_memberships && data.resource.event_memberships.length > 0) {
-                for (const membership of data.resource.event_memberships) {
-                    if (membership.user_email) {
-                        email = membership.user_email;
-                        console.log('✓ E-Mail aus event_memberships gefunden:', email);
+            // PRIORITÄT: Zuerst in event_guests suchen (das ist der Kunde)
+            if (data.resource && data.resource.event_guests && data.resource.event_guests.length > 0) {
+                for (const guest of data.resource.event_guests) {
+                    if (guest.email) {
+                        email = guest.email;
+                        console.log('✓ Kunden-E-Mail aus event_guests gefunden:', email);
                         break;
                     }
                 }
             }
-            // Versuch 3: In den Event-Gästen suchen
-            else if (data.resource && data.resource.event_guests && data.resource.event_guests.length > 0) {
-                for (const guest of data.resource.event_guests) {
-                    if (guest.email) {
-                        email = guest.email;
-                        console.log('✓ E-Mail aus event_guests gefunden:', email);
+            // Fallback zu anderen Quellen, wenn nötig
+            else if (data.resource && data.resource.invitees && data.resource.invitees.length > 0) {
+                for (const invitee of data.resource.invitees) {
+                    if (invitee.email) {
+                        email = invitee.email;
+                        console.log('✓ Kunden-E-Mail aus invitees gefunden:', email);
                         break;
                     }
                 }
@@ -347,7 +342,7 @@
                 fillEmailField(email);
                 return email;
             } else {
-                console.warn('⚠️ Keine E-Mail in den Event-Details gefunden');
+                console.warn('⚠️ Keine Kunden-E-Mail in den Event-Details gefunden');
                 return null;
             }
         } catch (error) {
