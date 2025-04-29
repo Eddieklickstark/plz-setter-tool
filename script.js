@@ -20,7 +20,7 @@
 
     var MAX_RETRIES = 3;
 
-    console.log('🚀 Script gestartet - Finale Version mit korrektem API-Endpoint');
+    console.log('🚀 Script gestartet - Finale Version mit korrektem API-Endpoint und der Kunden E-Mail');
 
     // Styles dynamisch hinzufügen
     function addStyles() {
