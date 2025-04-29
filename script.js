@@ -10,51 +10,75 @@
     var calendlyBooked   = false;
     var formSubmitted    = false;
     var exitIntentShown  = false;
+    var eventUuid        = null; // Für die Stornierungsfunktion
+    var RELOAD_COUNTDOWN = 3; // Sekunden bis zum Neuladen nach Stornierung
 
     // Reset bei jedem Laden
     localStorage.removeItem('calendlyBooked');
     localStorage.removeItem('formSubmitted');
     localStorage.removeItem('exitIntentShown');
-    localStorage.removeItem('calendlyEventUri');
+    localStorage.removeItem('eventUuid');
     localStorage.removeItem('calendlyEmail');
+    localStorage.removeItem('inviteeUri');
 
     var MAX_RETRIES = 3;
 
-    console.log('🚀 Script gestartet - Finale Version mit korrektem API-Endpoint und der Kunden E-Mail');
+    console.log('🚀 Script gestartet - Version mit Invitee API Integration');
 
     // Styles dynamisch hinzufügen
     function addStyles() {
         var css = document.createElement('style');
         css.type = 'text/css';
         css.innerHTML = [
+            /* Container */
             '.setter-tool { max-width:800px; margin:0 auto; padding:2rem; border-radius:2rem; font-family:figtree,sans-serif; }',
+
+            /* Überschriften */
             '.section-header { font-size:22px; color:#111827; margin-bottom:16px; font-weight:600; padding-bottom:8px; border-bottom:1px solid #E5E7EB; }',
             '.subsection-header { font-size:18px; color:#374151; margin:16px 0; font-weight:500; }',
+
+            /* Bundesland-Bereich */
             '.bundesland-section { margin-bottom:40px; }',
             '.bundesland-input-container { position:relative; margin-bottom:20px; }',
+
+            /* Input Styles */
             '.ios-input { width:100%; padding:12px; border:1px solid #E5E7EB; border-radius:10px; font-size:16px; background:#FAFAFA; }',
             '.ios-input:focus { outline:none; border-color:#046C4E; background:#FFFFFF; box-shadow:0 0 0 3px rgba(4,108,78,0.1); }',
             '.ios-input[readonly] { background-color:#f0f9ff; border-color:#93c5fd; color:#1e40af; }',
+
+            /* Calendly Placeholder & Container */
             '.calendly-placeholder { background:#F9FAFB; border:2px dashed #E5E7EB; border-radius:12px; padding:40px; text-align:center; color:#6B7280; min-height:400px; display:flex; align-items:center; justify-content:center; }',
             '#calendly-container { margin:20px 0; border-radius:12px; overflow:hidden; background:white; min-height:400px; }',
+
+            /* Formular */
             '.form-section { margin-top:40px; }',
             '.form-group { margin-bottom:32px; }',
             '.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }',
             '@media (max-width:640px){ .form-grid{ grid-template-columns:1fr; } }',
             '.ios-textarea { min-height:120px; resize:vertical; width:100%; }',
+
+            /* Button */
             '.ios-submit { background:#046C4E; color:white; padding:16px 32px; border:none; border-radius:10px; font-size:16px; cursor:pointer; width:100%; margin-top:24px; transition:all .3s ease; }',
             '.ios-submit:hover { background:#065F46; }',
             '.ios-submit:disabled { background:#ccc; cursor:not-allowed; }',
+
+            /* AE-Info */
             '.ae-info { background:#f7fafc; border:1px solid #E5E7EB; border-radius:8px; padding:20px; font-size:18px; }',
+
+            /* Erfolgsmeldung */
             '.success-message { background-color:#28a745; color:#fff; text-align:center; border-radius:12px; padding:15px; margin-top:10px; display:none; }',
             '.success-message p { margin:0; font-family:figtree,sans-serif; }',
             '.success-message p:first-child { font-size:20px; margin-bottom:8px; }',
             '.success-message p:last-child { font-size:14px; }',
             '.show { display:block !important; }',
+
+            /* Overlay für Ladeanimation */
             '.overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); display:none; align-items:center; justify-content:center; z-index:9999; }',
             '.overlay.show { display:flex; }',
             '.spinner { width:50px; height:50px; border:6px solid #f3f3f3; border-top:6px solid #046C4E; border-radius:50%; animation:spin 1s linear infinite; }',
             '@keyframes spin { 0%{ transform:rotate(0deg); } 100%{ transform:rotate(360deg); } }',
+
+            /* Exit Intent Styling */
             '.exit-intent-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background-color:rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:10000; }',
             '.exit-intent-dialog { max-width:500px; width:90%; background:white; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.2); padding:30px; position:relative; font-family:figtree,sans-serif; }',
             '.exit-intent-close { position:absolute; top:15px; right:15px; font-size:24px; line-height:1; cursor:pointer; color:#6B7280; }',
@@ -65,7 +89,34 @@
             '.exit-intent-button-primary:hover { background-color:#065F46; }',
             '.exit-intent-button-secondary { background-color:#F3F4F6; color:#374151; padding:12px 20px; border-radius:8px; font-weight:500; border:none; cursor:pointer; transition:background-color .2s; }',
             '.exit-intent-button-secondary:hover { background-color:#E5E7EB; }',
-            '#contact-form { display:none; opacity:0; transition:opacity .3s ease; }'
+            '#contact-form { display:none; opacity:0; transition:opacity .3s ease; }',
+            
+            /* Email Hilfe & Tooltip */
+            '.email-hint { background:#f0f9ff; border:1px solid #93c5fd; border-radius:8px; padding:10px 12px; margin:4px 0 12px; font-size:13px; color:#1e40af; display:none; }',
+            '.email-hint.show { display:block; }',
+            '.help-icon { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; background:#e0f2fe; color:#0369a1; border-radius:50%; font-size:15px; margin-left:8px; cursor:pointer; user-select:none; font-weight:bold; transition:all .2s ease; }',
+            '.help-icon:hover { background:#bae6fd; transform:scale(1.1); }',
+            '.tooltip { position:absolute; right:0; top:calc(100% + 10px); background:white; border-radius:10px; box-shadow:0 4px 25px rgba(0,0,0,0.15); padding:20px; width:320px; z-index:100; display:none; font-size:15px; line-height:1.6; color:#374151; }',
+            '.tooltip.show { display:block; animation:fadeIn .2s ease-in-out; }',
+            '@keyframes fadeIn { 0% { opacity:0; transform:translateY(-10px); } 100% { opacity:1; transform:translateY(0); } }',
+            '.tooltip-title { font-size:18px; font-weight:600; margin-bottom:12px; color:#111827; }',
+            '.tooltip-close { position:absolute; top:12px; right:15px; cursor:pointer; font-size:18px; color:#9ca3af; transition:color .2s; }',
+            '.tooltip-close:hover { color:#4b5563; }',
+            '.email-container { position:relative; }',
+            
+            /* Stornierungsfunktion */
+            '.cancel-button { background:#ef4444; color:white; padding:12px 16px; border:none; border-radius:8px; cursor:pointer; font-size:15px; font-weight:500; transition:all .2s ease; width:100%; display:flex; justify-content:center; align-items:center; gap:8px; }',
+            '.cancel-button:hover { background:#dc2626; transform:translateY(-1px); }',
+            '.cancel-button:active { transform:translateY(1px); }',
+            '.cancel-button:disabled { background:#f87171; cursor:not-allowed; }',
+            '.cancel-success { background:#10b981; color:white; padding:15px; border-radius:8px; margin-top:15px; text-align:center; display:none; font-size:15px; }',
+            '.cancel-success.show { display:block; animation:fadeIn .3s ease; }',
+            '.cancel-error { background:#ef4444; color:white; padding:15px; border-radius:8px; margin-top:15px; text-align:center; display:none; font-size:15px; }',
+            '.cancel-error.show { display:block; animation:fadeIn .3s ease; }',
+            '.spinner-small { width:18px; height:18px; border:3px solid rgba(255,255,255,0.3); border-top:3px solid white; border-radius:50%; animation:spin 1s linear infinite; display:none; }',
+            '.spinner-small.show { display:block; }',
+            '.countdown { font-weight:bold; }',
+            '.tooltip-message { margin-bottom:20px; line-height:1.5; }'
         ].join('\n');
         document.head.appendChild(css);
     }
@@ -197,7 +248,34 @@
                         <input type="text" class="ios-input required" name="vorname" placeholder="Vorname*" required>
                         <input type="text" class="ios-input required" name="nachname" placeholder="Nachname*" required>
                         <input type="text" class="ios-input required" name="position" placeholder="Position*" required>
-                        <input type="email" class="ios-input required" name="email" placeholder="E-Mail*" required>
+                        
+                        <!-- E-Mail-Feld mit Hilfe-Icon -->
+                        <div class="email-container">
+                            <div style="display:flex; align-items:center;">
+                                <input type="email" class="ios-input required" id="email-field" name="email" placeholder="E-Mail*" required>
+                                <div class="help-icon" id="email-help">?</div>
+                            </div>
+                            <div class="tooltip" id="email-tooltip">
+                                <div class="tooltip-close" id="tooltip-close">&times;</div>
+                                <div class="tooltip-title">E-Mail-Adresse falsch?</div>
+                                <div class="tooltip-message">
+                                    Wenn die bei der Buchung verwendete E-Mail-Adresse nicht korrekt ist, können Sie den Termin stornieren und anschließend einen neuen Termin buchen.
+                                </div>
+                                
+                                <button class="cancel-button" id="calendly-cancel">
+                                    Termin stornieren & neu buchen
+                                    <span class="spinner-small" id="cancel-spinner"></span>
+                                </button>
+                                
+                                <div class="cancel-success" id="cancel-success">
+                                    Termin erfolgreich storniert. Die Seite wird in <span id="countdown" class="countdown">${RELOAD_COUNTDOWN}</span> Sekunden neu geladen.
+                                </div>
+                                <div class="cancel-error" id="cancel-error">
+                                    Fehler bei der Stornierung. Bitte versuchen Sie es erneut oder nutzen Sie den Link in Ihrer Bestätigungs-E-Mail.
+                                </div>
+                            </div>
+                        </div>
+                        
                         <input type="tel" class="ios-input required" name="festnetz" placeholder="Festnetznummer* – Nur Zahlen!" required>
                         <input type="tel" class="ios-input" name="mobil" placeholder="Mobil – Nur Zahlen!">
                         <input type="url" class="ios-input" name="linkedin" placeholder="LinkedIn Profil: https://www.linkedin.com/in/beispiel" style="grid-column:span 2;">
@@ -292,13 +370,13 @@
         }
     }
 
-      // Calendly Event-Details vom Event-Endpoint abrufen - Korrigiert für Kundenemail
-    async function fetchCalendlyEvent(eventUri) {
+    // Funktion zum Abrufen der Invitee-Details (mit Email)
+    async function fetchInviteeDetails(inviteeUri) {
         try {
-            console.log('Rufe Termin-Details von der API ab:', eventUri);
+            console.log('🔄 Rufe Invitee-Details von der API ab:', inviteeUri);
             
             // API-Anfrage an Calendly senden
-            const response = await fetch(eventUri, {
+            const response = await fetch(inviteeUri, {
                 method: 'GET',
                 headers: {
                     'Authorization': 'Bearer ' + CALENDLY_API_KEY,
@@ -311,42 +389,23 @@
             }
             
             const data = await response.json();
-            console.log('✓ Event-Details erhalten:', data);
+            console.log('✓ Invitee-Details erhalten:', data);
             
-            // E-Mail-Adresse des EINGELADENEN/KUNDEN extrahieren (nicht des Calendly-Users)
-            let email = null;
-            
-            // PRIORITÄT: Zuerst in event_guests suchen (das ist der Kunde)
-            if (data.resource && data.resource.event_guests && data.resource.event_guests.length > 0) {
-                for (const guest of data.resource.event_guests) {
-                    if (guest.email) {
-                        email = guest.email;
-                        console.log('✓ Kunden-E-Mail aus event_guests gefunden:', email);
-                        break;
-                    }
-                }
-            }
-            // Fallback zu anderen Quellen, wenn nötig
-            else if (data.resource && data.resource.invitees && data.resource.invitees.length > 0) {
-                for (const invitee of data.resource.invitees) {
-                    if (invitee.email) {
-                        email = invitee.email;
-                        console.log('✓ Kunden-E-Mail aus invitees gefunden:', email);
-                        break;
-                    }
-                }
-            }
-            
-            if (email) {
+            // E-Mail-Adresse des Invitee extrahieren
+            if (data.resource && data.resource.email) {
+                const email = data.resource.email;
+                console.log('✓ Kunden-E-Mail gefunden:', email);
+                
+                // E-Mail in localStorage speichern und Formular ausfüllen
                 localStorage.setItem('calendlyEmail', email);
                 fillEmailField(email);
                 return email;
             } else {
-                console.warn('⚠️ Keine Kunden-E-Mail in den Event-Details gefunden');
+                console.warn('⚠️ Keine E-Mail in den Invitee-Details gefunden');
                 return null;
             }
         } catch (error) {
-            console.error('❌ Fehler beim API-Aufruf:', error);
+            console.error('❌ Fehler beim Abrufen der Invitee-Details:', error);
             return null;
         }
     }
@@ -356,27 +415,81 @@
         if (!email) return false;
         
         // E-Mail-Feld im Formular suchen
-        const emailField = document.querySelector('input[name="email"]') || 
-                          document.querySelector('input[type="email"]');
+        const emailField = document.getElementById('email-field');
+        if (!emailField) return false;
         
-        if (emailField) {
-            // E-Mail-Wert setzen
-            emailField.value = email;
+        // E-Mail-Wert setzen
+        emailField.value = email;
+        
+        // Als readonly markieren
+        emailField.setAttribute('readonly', 'readonly');
+        
+        // Visuelles Feedback
+        emailField.style.backgroundColor = '#f0f9ff';
+        emailField.style.borderColor = '#93c5fd';
+        emailField.style.color = '#1e40af';
+        
+        console.log('✓ E-Mail-Feld erfolgreich ausgefüllt mit:', email);
+        return true;
+    }
+
+    // Funktion zum Stornieren eines Termins - Mit direktem Link-Fallback
+    async function cancelEvent(uuid) {
+        console.log('🔄 Versuche Termin zu stornieren:', uuid);
+        
+        try {
+            // Zuerst API-Endpunkt versuchen
+            try {
+                const response = await fetch(`https://api.calendly.com/scheduled_events/${uuid}/cancellation`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + CALENDLY_API_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        reason: 'Falscher Kontakt, Termin wird neu gebucht'
+                    })
+                });
+                
+                console.log('📡 API-Antwort:', response.status);
+                
+                if (response.status === 201 || response.status === 204) {
+                    console.log('✅ Stornierung erfolgreich!');
+                    return { success: true };
+                }
+            } catch (apiError) {
+                console.warn('⚠️ API-Stornierung fehlgeschlagen:', apiError);
+                // Weitermachen zum Fallback
+            }
             
-            // Als readonly markieren
-            emailField.setAttribute('readonly', 'readonly');
+            // Fallback: Calendly-Stornierungslink öffnen
+            const cancelUrl = `https://calendly.com/cancellations/${uuid}`;
+            window.open(cancelUrl, '_blank');
             
-            // Visuelles Feedback
-            emailField.style.backgroundColor = '#f0f9ff';
-            emailField.style.borderColor = '#93c5fd';
-            emailField.style.color = '#1e40af';
-            
-            console.log('✓ E-Mail-Feld erfolgreich ausgefüllt mit:', email);
-            return true;
-        } else {
-            console.warn('⚠️ E-Mail-Feld nicht gefunden');
-            return false;
+            return { success: true, redirect: true };
+        } catch (error) {
+            console.error('❌ Fehler bei der Stornierungsanfrage:', error);
+            return { success: false, error: error.message };
         }
+    }
+
+    // Countdown für Seitenneuladen starten
+    function startCountdown(seconds) {
+        const countdownEl = document.getElementById('countdown');
+        if (!countdownEl) return;
+        
+        let remainingSeconds = seconds;
+        countdownEl.textContent = remainingSeconds;
+        
+        const countdownInterval = setInterval(() => {
+            remainingSeconds--;
+            countdownEl.textContent = remainingSeconds;
+            
+            if (remainingSeconds <= 0) {
+                clearInterval(countdownInterval);
+                window.location.reload();
+            }
+        }, 1000);
     }
 
     // Formular-Daten senden mit Retry
@@ -484,7 +597,8 @@
         if (sel) {
             sel.addEventListener('change', function(){
                 var bl = this.value;
-                document.getElementById('bundesland-hidden').value = bl;
+                var hiddenField = document.getElementById('bundesland-hidden');
+                if (hiddenField) hiddenField.value = bl;
                 updateUI(aeMapping[bl], bl);
             });
         }
@@ -521,6 +635,76 @@
                 }
             });
         }
+        
+        // E-Mail-Hilfe und Stornierungsfunktion
+        var emailHelp = document.getElementById('email-help');
+        var emailTooltip = document.getElementById('email-tooltip');
+        var tooltipClose = document.getElementById('tooltip-close');
+        var cancelButton = document.getElementById('calendly-cancel');
+        
+        if (emailHelp && emailTooltip) {
+            // Tooltip anzeigen bei Klick auf Hilfe-Icon
+            emailHelp.addEventListener('click', function(e) {
+                e.stopPropagation();
+                emailTooltip.classList.toggle('show');
+            });
+            
+            // Tooltip schließen
+            if (tooltipClose) {
+                tooltipClose.addEventListener('click', function() {
+                    emailTooltip.classList.remove('show');
+                });
+            }
+            
+            // Außerhalb klicken schließt Tooltip
+            document.addEventListener('click', function(e) {
+                if (emailTooltip.classList.contains('show') && 
+                    !emailTooltip.contains(e.target) && 
+                    e.target !== emailHelp) {
+                    emailTooltip.classList.remove('show');
+                }
+            });
+        }
+        
+        // Stornierungsbutton
+        if (cancelButton) {
+            cancelButton.addEventListener('click', async function() {
+                if (!eventUuid) {
+                    alert('Konnte keine Event-ID finden. Bitte nutzen Sie den Stornierungslink in Ihrer Bestätigungs-E-Mail.');
+                    return;
+                }
+                
+                // Button-Status: Lädt
+                cancelButton.disabled = true;
+                var spinner = document.getElementById('cancel-spinner');
+                var successMsg = document.getElementById('cancel-success');
+                var errorMsg = document.getElementById('cancel-error');
+                
+                if (spinner) spinner.classList.add('show');
+                if (successMsg) successMsg.classList.remove('show');
+                if (errorMsg) errorMsg.classList.remove('show');
+                
+                const result = await cancelEvent(eventUuid);
+                
+                if (result.success) {
+                    if (successMsg) successMsg.classList.add('show');
+                    
+                    // Status zurücksetzen
+                    calendlyBooked = false;
+                    localStorage.removeItem('calendlyBooked');
+                    localStorage.removeItem('eventUuid');
+                    localStorage.removeItem('inviteeUri');
+                    localStorage.removeItem('calendlyEmail');
+                    
+                    // Countdown starten und Seite neu laden
+                    startCountdown(RELOAD_COUNTDOWN);
+                } else {
+                    if (errorMsg) errorMsg.classList.add('show');
+                    cancelButton.disabled = false;
+                    if (spinner) spinner.classList.remove('show');
+                }
+            });
+        }
     }
 
     // Abhängigkeiten laden
@@ -544,7 +728,7 @@
         loadDependencies();
     }
 
-    // Einziger Calendly-Event-Listener mit direkter API-Integration
+    // Calendly-Event-Listener mit Invitee-Extraktion
     window.addEventListener('message', function(e) {
         if (e.data.event === 'calendly.event_scheduled') {
             console.log('✅ Termin gebucht!', e.data);
@@ -566,16 +750,31 @@
                 hint.style.display = 'none';
             }
             
-            // Event-URI aus dem Payload extrahieren
+            // Extrahiere Daten aus dem Payload
             const payload = e.data.payload || {};
-            const eventUri = payload.event ? payload.event.uri : null;
             
+            // WICHTIG: Holen wir die invitee URI direkt vom Payload
+            if (payload.invitee && payload.invitee.uri) {
+                const inviteeUri = payload.invitee.uri;
+                console.log('✓ Invitee-URI gefunden:', inviteeUri);
+                localStorage.setItem('inviteeUri', inviteeUri);
+                
+                // Hole die Invitee-Daten über die API (Email usw.)
+                fetchInviteeDetails(inviteeUri);
+            }
+            
+            // Event-URI für Stornierung speichern
+            const eventUri = payload.event ? payload.event.uri : null;
             if (eventUri) {
                 console.log('✓ Event-URI erhalten:', eventUri);
                 localStorage.setItem('calendlyEventUri', eventUri);
                 
-                // E-Mail über die Calendly API abrufen
-                fetchCalendlyEvent(eventUri);
+                // UUID für Stornierung extrahieren
+                eventUuid = eventUri.split('/').pop();
+                if (eventUuid) {
+                    console.log('✓ Event-UUID für Stornierung gespeichert:', eventUuid);
+                    localStorage.setItem('eventUuid', eventUuid);
+                }
             } else {
                 console.warn('⚠️ Keine Event-URI im Calendly-Event gefunden');
             }
