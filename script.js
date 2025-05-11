@@ -433,12 +433,46 @@
         return true;
     }
 
-    // Funktion zum Stornieren eines Termins - Mit direktem Link-Fallback
+    // Funktion zum Stornieren eines Termins - Mit Webhook-Benachrichtigung und Link-Fallback
     async function cancelEvent(uuid) {
         console.log('🔄 Versuche Termin zu stornieren:', uuid);
         
         try {
-            // Zuerst API-Endpunkt versuchen
+            // Zuerst den Webhook auslösen, um die Stornierung zu registrieren
+            const userEmail = localStorage.getItem('calendlyEmail') || document.getElementById('email-field')?.value || null;
+            const STORNO_WEBHOOK_URL = 'https://hook.eu2.make.com/216eyobx90ba6praq9en2ar6fm3im62g';
+            
+            if (userEmail) {
+                // Webhook-Benachrichtigung senden
+                console.log('📤 Sende Stornierungsbenachrichtigung für E-Mail:', userEmail);
+                
+                try {
+                    const webhookResponse = await fetch(STORNO_WEBHOOK_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'cancellation',
+                            email: userEmail,
+                            eventUuid: uuid,
+                            timestamp: new Date().toISOString(),
+                            reason: document.getElementById('cancel-reason')?.value || 'Termin storniert durch Benutzer'
+                        })
+                    });
+                    
+                    if (webhookResponse.ok) {
+                        console.log('✅ Stornierungsbenachrichtigung erfolgreich gesendet');
+                    } else {
+                        console.warn('⚠️ Stornierungsbenachrichtigung konnte nicht gesendet werden:', webhookResponse.status);
+                    }
+                } catch (webhookError) {
+                    console.error('❌ Fehler beim Senden der Stornierungsbenachrichtigung:', webhookError);
+                    // Wir setzen trotzdem fort mit der eigentlichen Stornierung
+                }
+            } else {
+                console.warn('⚠️ Keine E-Mail-Adresse für Stornierungsbenachrichtigung gefunden');
+            }
+            
+            // Dann API-Endpunkt versuchen für die eigentliche Stornierung
             try {
                 const response = await fetch(`https://api.calendly.com/scheduled_events/${uuid}/cancellation`, {
                     method: 'POST',
@@ -447,7 +481,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        reason: 'Falscher Kontakt, Termin wird neu gebucht'
+                        reason: document.getElementById('cancel-reason')?.value || 'Falscher Kontakt, Termin wird neu gebucht'
                     })
                 });
                 
