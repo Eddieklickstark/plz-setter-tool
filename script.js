@@ -127,7 +127,7 @@
         if (!container) return;
         container.innerHTML = `
             <div class="bundesland-section">
-                <h2 class="section-header">Terminbuchung</h2>
+                <h2 class="section-header">Terminbuchung (v2)</h2>
                 <h3 class="subsection-header">Schritt 1 – Calendly Termin buchen</h3>
                 <div class="bundesland-input-container">
                     <select id="bundesland-select" class="ios-input required">
