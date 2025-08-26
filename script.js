@@ -1,6 +1,6 @@
 (function() {
     // Konfiguration
-    var SHEET_URL     = 'https://hook.eu2.make.com/5ehpssi1hvnfm8do9ulicb4r2sn9t6ge';
+    var SHEET_URL     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR8BRATZeyiaD0NMh00CWU1bJYZA2XRYA3jrd_XRLg-wWV9UEh9hD___JLuiFZT8nalLamjKMJyc3MJ/pub?output=csv';
     var WEBHOOK_URL   = 'https://hook.eu2.make.com/t9xvbefzv5i8sjcr7u8tiyvau7t1wnlw';
     var CALENDLY_API_KEY = 'eyJraWQiOiIxY2UxZTEzNjE3ZGNmNzY2YjNjZWJjY2Y4ZGM1YmFmYThhNjVlNjg0MDIzZjdjMzJiZTgzNDliMjM4MDEzNWI0IiwidHlwIjoiUEFUIiwiYWxnIjoiRVMyNTYifQ.eyJpc3MiOiJodHRwczovL2F1dGguY2FsZW5kbHkuY29tIiwiaWF0IjoxNzQ1NDE0ODM2LCJqdGkiOiIwYzMxYzQzNC1lODQ4LTQ5YTItOTdiNi02Y2ZlZDZmODcxZjkiLCJ1c2VyX3V1aWQiOiI3ZWQyMjVhNi0wMzdjLTQ2ZWItOWFhOC0xY2QyMWU4Njk0YjEifQ.VbjvR_SqU9eJD3DaixqbpgZSdkR9yxpOYhdO8XrcPm75wFY2lM40DX8L6caJmUa-1ABkgW6xQdIrnlVEE_KYuA';
     var aeMapping     = {};
@@ -316,49 +316,35 @@
     }
 
     // AE-Daten aus Google Sheet laden
-    // AE-Daten direkt im Skript hinterlegen (temporäre Lösung)
     function loadAEData() {
-        console.log('Lade AE-Daten direkt aus dem Skript (Hardcoded).');
-    
-        // Die Daten aus deinem Google Sheet als JavaScript-Array
-        const hardcodedData = [
-            { name: "Daniel Budisky", Bundesland: "Berlin", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Sachsen-Anhalt", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Mecklenburg-Vorpommern", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Brandenburg", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Christian Thiemann", Bundesland: "Nordrhein-Westfalen", calendlyLink: "https://calendly.com/c-thiemann-giga/informationstermin-giga-green" },
-            { name: "Christian Thiemann", Bundesland: "Saarland", calendlyLink: "https://calendly.com/c-thiemann-giga/informationstermin-giga-green" },
-            { name: "Christian Thiemann", Bundesland: "Rheinland-Pfalz", calendlyLink: "https://calendly.com/c-thiemann-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Schleswig-Holstein", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Hamburg", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Niedersachsen", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Bremen", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Thüringen", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Daniel Budisky", Bundesland: "Hessen", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
-            { name: "Fabian Hirschler", Bundesland: "Bayern", calendlyLink: "https://calendly.com/f-hirschler-giga/informationstermin-giga-green" },
-            { name: "Fabian Hirschler", Bundesland: "Sachsen", calendlyLink: "https://calendly.com/f-hirschler-giga/informationstermin-giga-green" },
-            { name: "Fabian Hirschler", Bundesland: "Baden-Württemberg", calendlyLink: "https://calendly.com/f-hirschler-giga/informationstermin-giga-green" },
-            { name: "Eddie Esche", Bundesland: "TESTING INTERN", calendlyLink: "https://calendly.com/klickstark/kurzer-austausch" },
-            { name: "Steffen Geffers", Bundesland: "", calendlyLink: "https://calendly.com/s-geffers-giga/informationstermin-giga-green" },
-            { name: "Viktoria Kirchhöfer", Bundesland: "", calendlyLink: "https://calendly.com/v-kirchhoefer-giga/informationstermin-giga-green" }
-        ];
-    
-        hardcodedData.forEach(function(row) {
-            if (row.Bundesland && row.name && row.calendlyLink) {
-                var bl = row.Bundesland.trim();
-                if (bl) {
-                    aeMapping[bl] = {
-                        name: row.name.trim(),
-                        calendlyLink: row.calendlyLink.trim()
-                    };
-                    if (bundeslaender.indexOf(bl) === -1) {
-                        bundeslaender.push(bl);
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', SHEET_URL, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                Papa.parse(xhr.responseText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        aeMapping     = {};
+                        bundeslaender = [];
+                        results.data.forEach(function(row) {
+                            if (row.Bundesland && row.name) {
+                                var bl = row.Bundesland.trim();
+                                aeMapping[bl] = {
+                                    name: row.name.trim(),
+                                    calendlyLink: row.calendly_link ? row.calendly_link.trim() : ''
+                                };
+                                if (bundeslaender.indexOf(bl) === -1) {
+                                    bundeslaender.push(bl);
+                                }
+                            }
+                        });
+                        updateBundeslandSelect();
                     }
-                }
+                });
             }
-        });
-    
-        updateBundeslandSelect();
+        };
+        xhr.send();
     }
 
     // UI aktualisieren nach Auswahl
