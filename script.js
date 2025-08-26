@@ -316,35 +316,49 @@
     }
 
     // AE-Daten aus Google Sheet laden
+    // AE-Daten direkt im Skript hinterlegen (temporäre Lösung)
     function loadAEData() {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', SHEET_URL, true);
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4 && xhr.status === 200) {
-                Papa.parse(xhr.responseText, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: function(results) {
-                        aeMapping     = {};
-                        bundeslaender = [];
-                        results.data.forEach(function(row) {
-                            if (row.Bundesland && row.name) {
-                                var bl = row.Bundesland.trim();
-                                aeMapping[bl] = {
-                                    name: row.name.trim(),
-                                    calendlyLink: row.calendly_link ? row.calendly_link.trim() : ''
-                                };
-                                if (bundeslaender.indexOf(bl) === -1) {
-                                    bundeslaender.push(bl);
-                                }
-                            }
-                        });
-                        updateBundeslandSelect();
+        console.log('Lade AE-Daten direkt aus dem Skript (Hardcoded).');
+    
+        // Die Daten aus deinem Google Sheet als JavaScript-Array
+        const hardcodedData = [
+            { name: "Daniel Budisky", Bundesland: "Berlin", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Sachsen-Anhalt", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Mecklenburg-Vorpommern", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Brandenburg", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Christian Thiemann", Bundesland: "Nordrhein-Westfalen", calendlyLink: "https://calendly.com/c-thiemann-giga/informationstermin-giga-green" },
+            { name: "Christian Thiemann", Bundesland: "Saarland", calendlyLink: "https://calendly.com/c-thiemann-giga/informationstermin-giga-green" },
+            { name: "Christian Thiemann", Bundesland: "Rheinland-Pfalz", calendlyLink: "https://calendly.com/c-thiemann-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Schleswig-Holstein", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Hamburg", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Niedersachsen", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Bremen", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Thüringen", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Daniel Budisky", Bundesland: "Hessen", calendlyLink: "https://calendly.com/d-budisky-giga/informationstermin-giga-green" },
+            { name: "Fabian Hirschler", Bundesland: "Bayern", calendlyLink: "https://calendly.com/f-hirschler-giga/informationstermin-giga-green" },
+            { name: "Fabian Hirschler", Bundesland: "Sachsen", calendlyLink: "https://calendly.com/f-hirschler-giga/informationstermin-giga-green" },
+            { name: "Fabian Hirschler", Bundesland: "Baden-Württemberg", calendlyLink: "https://calendly.com/f-hirschler-giga/informationstermin-giga-green" },
+            { name: "Eddie Esche", Bundesland: "TESTING INTERN", calendlyLink: "https://calendly.com/klickstark/kurzer-austausch" },
+            { name: "Steffen Geffers", Bundesland: "", calendlyLink: "https://calendly.com/s-geffers-giga/informationstermin-giga-green" },
+            { name: "Viktoria Kirchhöfer", Bundesland: "", calendlyLink: "https://calendly.com/v-kirchhoefer-giga/informationstermin-giga-green" }
+        ];
+    
+        hardcodedData.forEach(function(row) {
+            if (row.Bundesland && row.name && row.calendlyLink) {
+                var bl = row.Bundesland.trim();
+                if (bl) {
+                    aeMapping[bl] = {
+                        name: row.name.trim(),
+                        calendlyLink: row.calendlyLink.trim()
+                    };
+                    if (bundeslaender.indexOf(bl) === -1) {
+                        bundeslaender.push(bl);
                     }
-                });
+                }
             }
-        };
-        xhr.send();
+        });
+    
+        updateBundeslandSelect();
     }
 
     // UI aktualisieren nach Auswahl
