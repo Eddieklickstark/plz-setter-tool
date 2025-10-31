@@ -1,16 +1,16 @@
 (function() {
-    // Konfiguration
-    var SHEET_URL     = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR8BRATZeyiaD0NMh00CWU1bJYZA2XRYA3jrd_XRLg-wWV9UEh9hD___JLuiFZT8nalLamjKMJyc3MJ/pub?output=csv';
-    var WEBHOOK_URL   = 'https://hook.eu2.make.com/t9xvbefzv5i8sjcr7u8tiyvau7t1wnlw';
-    var CALENDLY_API_KEY = 'eyJraWQiOiIxY2UxZTEzNjE3ZGNmNzY2YjNjZWJjY2Y4ZGM1YmFmYThhNjVlNjg0MDIzZjdjMzJiZTgzNDliMjM4MDEzNWI0IiwidHlwIjoiUEFUIiwiYWxnIjoiRVMyNTYifQ.eyJpc3MiOiJodHRwczovL2F1dGguY2FsZW5kbHkuY29tIiwiaWF0IjoxNzQ1NDE0ODM2LCJqdGkiOiIwYzMxYzQzNC1lODQ4LTQ5YTItOTdiNi02Y2ZlZDZmODcxZjkiLCJ1c2VyX3V1aWQiOiI3ZWQyMjVhNi0wMzdjLTQ2ZWItOWFhOC0xY2QyMWU4Njk0YjEifQ.VbjvR_SqU9eJD3DaixqbpgZSdkR9yxpOYhdO8XrcPm75wFY2lM40DX8L6caJmUa-1ABkgW6xQdIrnlVEE_KYuA';
-    var aeMapping     = {};
+    // --- Konfiguration ---
+    // Alle Schlüssel sind entfernt. Dein Worker ist jetzt der Mittelsmann.
+    const PROXY_URL = 'https://gigagreen-calendly-proxy.eddie-escha.workers.dev';
+    
+    var aeMapping = {};
     var bundeslaender = [];
 
     // Status‑Variablen
-    var calendlyBooked   = false;
-    var formSubmitted    = false;
-    var exitIntentShown  = false;
-    var eventUuid        = null; // Für die Stornierungsfunktion
+    var calendlyBooked = false;
+    var formSubmitted = false;
+    var exitIntentShown = false;
+    var eventUuid = null; // Für die Stornierungsfunktion
     var RELOAD_COUNTDOWN = 3; // Sekunden bis zum Neuladen nach Stornierung
 
     // Reset bei jedem Laden
@@ -23,7 +23,7 @@
 
     var MAX_RETRIES = 3;
 
-    console.log('🚀 Script gestartet - Version mit Invitee API Integration');
+    console.log('🚀 Script gestartet - Version mit Proxy-Integration');
 
     // Styles dynamisch hinzufügen
     function addStyles() {
@@ -148,7 +148,6 @@
                 <h2 class="section-header">Kontaktinformationen</h2>
                 <input type="hidden" id="bundesland-hidden" name="bundesland" value="">
 
-                <!-- Flächeninformationen -->
                 <div class="form-group">
                     <h3 class="subsection-header">Flächeninformationen</h3>
                     <div class="form-grid">
@@ -174,7 +173,6 @@
                     </div>
                 </div>
 
-                <!-- Standortinformationen -->
                 <div class="form-group">
                     <h3 class="subsection-header">Standortinformationen</h3>
                     <div class="form-grid">
@@ -185,7 +183,6 @@
                     </div>
                 </div>
 
-                <!-- Unternehmensinformationen -->
                 <div class="form-group">
                     <h3 class="subsection-header">Unternehmensinformationen</h3>
                     <div class="form-grid">
@@ -235,7 +232,6 @@
                     </div>
                 </div>
 
-                <!-- Kontaktperson -->
                 <div class="form-group">
                     <h3 class="subsection-header">Kontaktperson</h3>
                     <div class="form-grid">
@@ -249,7 +245,6 @@
                         <input type="text" class="ios-input required" name="nachname" placeholder="Nachname*" required>
                         <input type="text" class="ios-input required" name="position" placeholder="Position*" required>
                         
-                        <!-- E-Mail-Feld mit Hilfe-Icon -->
                         <div class="email-container">
                             <div style="display:flex; align-items:center;">
                                 <input type="email" class="ios-input required" id="email-field" name="email" placeholder="E-Mail*" required>
@@ -282,7 +277,6 @@
                     </div>
                 </div>
 
-                <!-- Gesprächsnotiz -->
                 <div class="form-group">
                     <h3 class="subsection-header">Gesprächsnotiz*</h3>
                     <textarea class="ios-input ios-textarea required" name="gespraechsnotiz" placeholder="Gesprächsnotiz – Bitte ausführlich (mind. 3 Sätze)." required></textarea>
@@ -315,17 +309,18 @@
         });
     }
 
-    // AE-Daten aus Google Sheet laden
+    // AE-Daten aus Google Sheet laden (über den Proxy)
     function loadAEData() {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', SHEET_URL, true);
+        // *** GEÄNDERT: Ruft jetzt den Proxy auf, der die CSV-Daten holt ***
+        xhr.open('GET', PROXY_URL + '/api/sheet-csv', true);
         xhr.onreadystatechange = function() {
             if (xhr.readyState === 4 && xhr.status === 200) {
                 Papa.parse(xhr.responseText, {
                     header: true,
                     skipEmptyLines: true,
                     complete: function(results) {
-                        aeMapping     = {};
+                        aeMapping = {};
                         bundeslaender = [];
                         results.data.forEach(function(row) {
                             if (row.Bundesland && row.name) {
@@ -349,7 +344,7 @@
 
     // UI aktualisieren nach Auswahl
     function updateUI(ae, bundesland) {
-        var resultDiv   = document.getElementById('ae-result');
+        var resultDiv = document.getElementById('ae-result');
         var calendlyDiv = document.getElementById('calendly-container');
         if (!resultDiv || !calendlyDiv) return;
         if (ae) {
@@ -375,11 +370,14 @@
         try {
             console.log('🔄 Rufe Invitee-Details von der API ab:', inviteeUri);
             
-            // API-Anfrage an Calendly senden
-            const response = await fetch(inviteeUri, {
+            // *** GEÄNDERT: Baut die Proxy-URL zusammen ***
+            // Extrahiert den Pfad (z.B. /invitees/1234...) aus der vollen URL
+            const inviteePath = new URL(inviteeUri).pathname;
+            
+            const response = await fetch(PROXY_URL + '/api/calendly' + inviteePath, {
                 method: 'GET',
                 headers: {
-                    'Authorization': 'Bearer ' + CALENDLY_API_KEY,
+                    // *** GEÄNDERT: Authorization-Header entfernt. Der Proxy fügt ihn hinzu. ***
                     'Content-Type': 'application/json'
                 }
             });
@@ -440,14 +438,17 @@
         try {
             // Zuerst den Webhook auslösen, um die Stornierung zu registrieren
             const userEmail = localStorage.getItem('calendlyEmail') || document.getElementById('email-field')?.value || null;
-            const STORNO_WEBHOOK_URL = 'https://hook.eu2.make.com/216eyobx90ba6praq9en2ar6fm3im62g';
+            
+            // *** GEÄNDERT: Storno-Webhook-URL entfernt. Wird durch Proxy-Aufruf ersetzt. ***
+            // const STORNO_WEBHOOK_URL = '...'; 
             
             if (userEmail) {
                 // Webhook-Benachrichtigung senden
                 console.log('📤 Sende Stornierungsbenachrichtigung für E-Mail:', userEmail);
                 
                 try {
-                    const webhookResponse = await fetch(STORNO_WEBHOOK_URL, {
+                    // *** GEÄNDERT: Ruft jetzt den /api/storno Endpunkt des Proxys auf ***
+                    const webhookResponse = await fetch(PROXY_URL + '/api/storno', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -474,10 +475,11 @@
             
             // Dann API-Endpunkt versuchen für die eigentliche Stornierung
             try {
-                const response = await fetch(`https://api.calendly.com/scheduled_events/${uuid}/cancellation`, {
+                // *** GEÄNDERT: Ruft jetzt den /api/calendly Endpunkt des Proxys auf ***
+                const response = await fetch(`${PROXY_URL}/api/calendly/scheduled_events/${uuid}/cancellation`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': 'Bearer ' + CALENDLY_API_KEY,
+                        // *** GEÄNDERT: Authorization-Header entfernt. Der Proxy fügt ihn hinzu. ***
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
@@ -529,7 +531,8 @@
     // Formular-Daten senden mit Retry
     async function sendFormData(data, attempt = 1) {
         try {
-            var res = await fetch(WEBHOOK_URL, {
+            // *** GEÄNDERT: Ruft jetzt den /api/make Endpunkt des Proxys auf ***
+            var res = await fetch(PROXY_URL + '/api/make', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -702,7 +705,8 @@
         
         // Stornierungsbutton
         if (cancelButton) {
-            cancelButton.addEventListener('click', async function() {
+            cancelButton.addEventListener('click', async function(e) {
+                e.preventDefault(); // Verhindert Formular-Submit, falls es in einem Formular ist
                 if (!eventUuid) {
                     alert('Konnte keine Event-ID finden. Bitte nutzen Sie den Stornierungslink in Ihrer Bestätigungs-E-Mail.');
                     return;
@@ -747,7 +751,7 @@
         papa.src = 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js';
         papa.onload = function(){
             var cal = document.createElement('script');
-            cal.src   = 'https://assets.calendly.com/assets/external/widget.js';
+            cal.src = 'https://assets.calendly.com/assets/external/widget.js';
             cal.async = true;
             cal.onload = init;
             document.head.appendChild(cal);
