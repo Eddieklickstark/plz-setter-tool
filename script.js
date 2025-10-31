@@ -1,7 +1,7 @@
 (function() {
     // --- Konfiguration ---
     // Alle Schlüssel sind entfernt. Dein Worker ist jetzt der Mittelsmann.
-    const PROXY_URL = 'https://gigagreen-calendly-proxy.eddie-escha.workers.dev';
+    const PROXY_URL = 'https://gigagreen-calendly-proxy.eddie-esche.workers.dev';
     
     var aeMapping = {};
     var bundeslaender = [];
